@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🐙 Ink publipostage Grist</title>
+
+    <!-- DSFR CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='dsfr/css/dsfr.min.css') }}" />
+
+    <!-- Quill.js -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet" />
+
+    <!-- CSS personnalisé -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style-dsfr.css') }}" />
+  </head>
+  <body>
+    <!-- Header DSFR -->
+    <header role="banner" class="fr-header">
+      <div class="fr-header__body">
+        <div class="fr-container">
+          <div class="fr-header__body-row">
+            <div class="fr-header__brand fr-enlarge-link">
+              <div class="fr-header__brand-top">
+                <div class="fr-header__logo">
+                  <p class="fr-logo">République<br />Française</p>
+                </div>
+              </div>
+              <div class="fr-header__service">
+                <p class="fr-header__service-title">🐙 Ink publipostage Grist</p>
+                <p class="fr-header__service-tagline">Génération de documents personnalisés</p>
+              </div>
+            </div>
+            <div class="fr-header__tools">
+              <div class="fr-header__tools-links">
+                <ul class="fr-btns-group">
+                  <li>
+                    <span class="fr-badge fr-badge--success" id="connectionStatus">
+                      Vérification...
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Contenu principal -->
+    <main role="main" id="content">
+      <div class="fr-container-fluid">
+        <div class="fr-grid-row">
+          <!-- Sidebar avec accordéons DSFR -->
+          <div class="fr-col-12 fr-col-md-4 sidebar-column">
+            <div class="fr-accordions-group">
+              <h2 class="fr-h5">Configuration</h2>
+
+              <!-- 0. Configuration API Grist (NOUVEAU) -->
+              <section class="fr-accordion">
+                <h3 class="fr-accordion__title">
+                  <button
+                    class="fr-accordion__btn"
+                    aria-expanded="true"
+                    aria-controls="accordion-0"
+                  >
+                    Connexion Grist
+                  </button>
+                </h3>
+                <div class="fr-collapse fr-collapse--expanded" id="accordion-0">
+                  <div class="accordion-content">
+                    <div class="fr-input-group">
+                      <label class="fr-label" for="gristApiKey">
+                        Clé API Grist
+                        <span class="fr-hint-text">Commence par "grist_api_" ou similaire</span>
+                      </label>
+                      <input
+                        class="fr-input"
+                        type="text"
+                        id="gristApiKey"
+                        placeholder="grist_api_..."
+                        onchange="saveGristConfig()"
+                      />
+                    </div>
+
+                    <div class="fr-input-group fr-mt-2w">
+                      <label class="fr-label" for="gristDocId">
+                        ID du document Grist
+                        <span class="fr-hint-text">Identifiant du document à utiliser</span>
+                      </label>
+                      <input
+                        class="fr-input"
+                        type="text"
+                        id="gristDocId"
+                        placeholder="ABC123..."
+                        onchange="saveGristConfig()"
+                      />
+                    </div>
+
+                    <button class="fr-btn fr-btn--sm fr-mt-2w" onclick="testGristConnection()">
+                      Tester la connexion
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 1. Table Grist -->
+              <section class="fr-accordion">
+                <h3 class="fr-accordion__title">
+                  <button
+                    class="fr-accordion__btn"
+                    aria-expanded="false"
+                    aria-controls="accordion-1"
+                  >
+                    Table Grist
+                  </button>
+                </h3>
+                <div class="fr-collapse" id="accordion-1">
+                  <div class="accordion-content">
+                    <div class="fr-select-group">
+                      <label class="fr-label" for="tableSelect"> Sélectionner une table </label>
+                      <select class="fr-select" id="tableSelect" onchange="loadColumns()">
+                        <option value="">Sélectionner...</option>
+                      </select>
+                    </div>
+                    <button class="fr-btn fr-btn--sm fr-mt-2w" onclick="loadTables()">
+                      Actualiser les tables
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 2. Champs disponibles -->
+              <section class="fr-accordion">
+                <h3 class="fr-accordion__title">
+                  <button
+                    class="fr-accordion__btn"
+                    aria-expanded="false"
+                    aria-controls="accordion-2"
+                  >
+                    Champs disponibles
+                  </button>
+                </h3>
+                <div class="fr-collapse" id="accordion-2">
+                  <div class="accordion-content">
+                    <div class="fr-callout fr-callout--brown-caramel fr-mb-2w">
+                      <p class="fr-callout__text">💡 Cliquez sur un badge pour l'insérer</p>
+                    </div>
+                    <div class="fields-container" id="fieldsContainer">
+                      <p class="fr-text--sm">Sélectionnez d'abord une table</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 3. Enregistrement test -->
+              <section class="fr-accordion">
+                <h3 class="fr-accordion__title">
+                  <button
+                    class="fr-accordion__btn"
+                    aria-expanded="false"
+                    aria-controls="accordion-3"
+                  >
+                    Enregistrement test
+                  </button>
+                </h3>
+                <div class="fr-collapse" id="accordion-3">
+                  <div class="accordion-content">
+                    <div class="fr-select-group">
+                      <label class="fr-label" for="recordSelect"> Ligne pour l'aperçu </label>
+                      <select class="fr-select" id="recordSelect" onchange="selectRecord()">
+                        <option value="">Sélectionner...</option>
+                      </select>
+                    </div>
+                    <div class="sample-data fr-mt-2w" id="sampleData">
+                      <p class="fr-text--sm">Aucun enregistrement sélectionné</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 4. Filtre de génération -->
+              <section class="fr-accordion">
+                <h3 class="fr-accordion__title">
+                  <button
+                    class="fr-accordion__btn"
+                    aria-expanded="false"
+                    aria-controls="accordion-4"
+                  >
+                    Filtre de génération
+                  </button>
+                </h3>
+                <div class="fr-collapse" id="accordion-4">
+                  <div class="accordion-content">
+                    <p class="fr-text--sm fr-mb-2w">
+                      Filtrer sur : <code id="filterColumnName">Pdf_print</code>
+                    </p>
+                    <div class="fr-checkbox-group">
+                      <input type="checkbox" id="filterEnabled" onchange="toggleFilter()" />
+                      <label class="fr-label" for="filterEnabled"> Activer le filtre </label>
+                    </div>
+                    <div class="fr-input-group fr-mt-2w">
+                      <label class="fr-label" for="filterColumn"> Nom de la colonne </label>
+                      <input
+                        class="fr-input"
+                        type="text"
+                        id="filterColumn"
+                        value="Pdf_print"
+                        onchange="updateFilterColumn()"
+                      />
+                    </div>
+                    <p class="fr-text--sm fr-mt-2w">
+                      PDFs à générer : <strong id="filteredCount">0/0</strong>
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 5. Options avancées -->
+              <section class="fr-accordion">
+                <h3 class="fr-accordion__title">
+                  <button
+                    class="fr-accordion__btn"
+                    aria-expanded="false"
+                    aria-controls="accordion-5"
+                  >
+                    Options avancées
+                  </button>
+                </h3>
+                <div class="fr-collapse" id="accordion-5">
+                  <div class="accordion-content">
+                    <!-- Logo -->
+                    <div class="fr-upload-group">
+                      <label class="fr-label" for="logoUpload"> Logo (optionnel) </label>
+                      <input
+                        class="fr-upload"
+                        type="file"
+                        id="logoUpload"
+                        accept="image/*"
+                        onchange="handleLogo(event)"
+                      />
+                    </div>
+                    <div id="logoPreview" class="image-preview"></div>
+
+                    <!-- Service -->
+                    <div class="fr-input-group fr-mt-2w">
+                      <label class="fr-label" for="serviceName"> Nom du service </label>
+                      <input
+                        class="fr-input"
+                        type="text"
+                        id="serviceName"
+                        placeholder="Ex: Direction Générale"
+                        onchange="updateServiceName()"
+                      />
+                    </div>
+
+                    <!-- Signature -->
+                    <div class="fr-upload-group fr-mt-2w">
+                      <label class="fr-label" for="signatureUpload"> Signature (optionnel) </label>
+                      <input
+                        class="fr-upload"
+                        type="file"
+                        id="signatureUpload"
+                        accept="image/*"
+                        onchange="handleSignature(event)"
+                      />
+                    </div>
+                    <div id="signaturePreview" class="image-preview"></div>
+
+                    <!-- Nom du fichier -->
+                    <div class="fr-input-group fr-mt-2w">
+                      <label class="fr-label" for="filenamePattern"> Modèle nom de fichier </label>
+                      <input
+                        class="fr-input"
+                        type="text"
+                        id="filenamePattern"
+                        value="document_{id}"
+                        onchange="updateFilenamePreview()"
+                      />
+                      <span class="fr-hint-text">Ex: facture_{numero}_{date}</span>
+                    </div>
+                    <div id="filenamePreview" class="fr-mt-1w">
+                      <code>document_1.pdf</code>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 6. Templates sauvegardés -->
+              <section class="fr-accordion">
+                <h3 class="fr-accordion__title">
+                  <button
+                    class="fr-accordion__btn"
+                    aria-expanded="false"
+                    aria-controls="accordion-6"
+                  >
+                    Templates sauvegardés
+                  </button>
+                </h3>
+                <div class="fr-collapse" id="accordion-6">
+                  <div class="accordion-content">
+                    <button class="fr-btn fr-btn--sm fr-mb-2w" onclick="saveTemplate()">
+                      Sauvegarder le template actuel
+                    </button>
+                    <div class="template-list" id="templatesList">
+                      <p class="fr-text--sm">Aucun template sauvegardé</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <!-- Zone principale -->
+          <div class="fr-col-12 fr-col-md-8 main-column">
+            <!-- Onglets -->
+            <div class="tab-navigation">
+              <button class="tab-btn active" onclick="switchTab('editor')">Editeur</button>
+              <button class="tab-btn" onclick="switchTab('preview')">Aperçu</button>
+              <button class="tab-btn" onclick="switchTab('code')">Code</button>
+            </div>
+
+            <!-- Panneau Editeur -->
+            <div id="editorTab" class="tab-panel active">
+              <div class="fr-callout fr-callout--blue-ecume fr-mb-3w">
+                <h4 class="fr-callout__title">Mode édition</h4>
+                <p class="fr-callout__text">
+                  Utilisez les outils de mise en forme, puis cliquez sur les badges bleus pour
+                  insérer les champs dynamiques
+                </p>
+              </div>
+
+              <div id="editor" class="editor-box"></div>
+
+              <div class="fr-mt-3w">
+                <button class="fr-btn" onclick="saveTemplate()">💾 Sauvegarder le template</button>
+              </div>
+
+              <!-- CSS personnalisé -->
+              <div class="fr-card fr-mt-4w">
+                <div class="fr-card__body">
+                  <h4 class="fr-card__title">🎨 CSS personnalisé (optionnel)</h4>
+                  <div class="fr-card__content">
+                    <div class="fr-input-group">
+                      <label class="fr-label" for="cssEditor"> Styles additionnels </label>
+                      <textarea
+                        class="fr-input"
+                        id="cssEditor"
+                        rows="8"
+                        placeholder="/* Ajoutez vos styles CSS ici */"
+                      ></textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Panneau Aperçu -->
+            <div id="previewTab" class="tab-panel">
+              <div class="fr-callout fr-callout--green-tilleul-verveine fr-mb-3w">
+                <h4 class="fr-callout__title">Aperçu du document</h4>
+                <p class="fr-callout__text">
+                  Visualisation au format A4 - Correspond au rendu final du PDF
+                </p>
+              </div>
+
+              <div class="preview-container">
+                <div class="preview-a4-wrapper">
+                  <iframe id="previewFrame"></iframe>
+                </div>
+              </div>
+
+              <div class="fr-btns-group fr-mt-3w">
+                <button class="fr-btn" onclick="generatePreview()">📄 Actualiser l'aperçu</button>
+                <button class="fr-btn" onclick="generatePDF()">
+                  📝 Générer PDF (ligne sélectionnée)
+                </button>
+                <button class="fr-btn" onclick="generateMultiplePDF()">
+                  📚 Générer tous les PDF
+                </button>
+              </div>
+            </div>
+
+            <!-- Panneau Code -->
+            <div id="codeTab" class="tab-panel">
+              <div class="fr-callout fr-mb-3w">
+                <h4 class="fr-callout__title">Code HTML généré</h4>
+                <p class="fr-callout__text">Code source HTML produit par l'éditeur WYSIWYG</p>
+              </div>
+
+              <div class="code-viewer">
+                <pre id="htmlCode">&lt;!-- Le code HTML apparaîtra ici --&gt;</pre>
+              </div>
+
+              <div class="fr-btns-group fr-mt-3w">
+                <button class="fr-btn fr-btn--secondary" onclick="copyHTMLCode()">
+                  Copier le code
+                </button>
+                <button class="fr-btn fr-btn--secondary" onclick="updateHTMLCode()">
+                  Actualiser
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Modale de chargement -->
+    <dialog id="loadingModal" class="modal-loading">
+      <div class="spinner"></div>
+      <h2 id="loading-title">Génération en cours...</h2>
+      <p id="loadingMessage">Veuillez patienter</p>
+    </dialog>
+
+    <!-- Notification toast -->
+    <div id="notification" class="notification-toast" style="display: none">
+      <div id="notificationMessage"></div>
+    </div>
+
+    <!-- DSFR JS -->
+    <script
+      type="module"
+      src="{{ url_for('static', filename='dsfr/js/dsfr.module.min.js') }}"
+    ></script>
+    <script
+      nomodule
+      src="{{ url_for('static', filename='dsfr/js/dsfr.nomodule.min.js') }}"
+    ></script>
+
+    <!-- Quill.js -->
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+
+    <!-- JavaScript personnalisé -->
+    <script src="{{ url_for('static', filename='js/app-dsfr.js') }}"></script>
+  </body>
+</html>
