@@ -283,13 +283,36 @@ class DocumentGenerator:
         return filepath
     
     def load_template(self, template_name: str) -> Dict[str, Any]:
-        """Charge un template sauvegardÃ©"""
+        """Charge un template sauvegardé"""
+        print(f"[LOAD] Template demandé: '{template_name}'")
+        
         safe_name = "".join(c for c in template_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
         safe_name = safe_name.replace(' ', '_')
         filepath = os.path.join(self.templates_folder, f"{safe_name}.json")
         
+        print(f"[LOAD] Chemin calculé: {filepath}")
+        print(f"[LOAD] Fichier existe: {os.path.exists(filepath)}")
+        
+        # Liste tous les fichiers du dossier
+        if os.path.exists(self.templates_folder):
+            print(f"[LOAD] Fichiers dans {self.templates_folder}:")
+            for f in os.listdir(self.templates_folder):
+                print(f"  - {f}")
+        
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Template '{template_name}' introuvable à {filepath}")
+        
         with open(filepath, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+        
+        return {
+            'template_content': data.get('content', ''),
+            'template_css': data.get('css', ''),
+            'logo': data.get('logo'),
+            'signature': data.get('signature'),
+            'service_name': data.get('service_name'),
+            'table_id': data.get('table_id')
+        }
     
     def list_templates(self) -> List[str]:
         """Liste tous les templates disponibles"""

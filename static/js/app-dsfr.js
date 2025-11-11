@@ -816,6 +816,9 @@ async function saveTemplate() {
       body: JSON.stringify({
         template_name: templateName,
         template_content: htmlContent,
+        logo: currentLogo,
+        signature: currentSignature,
+        service_name: currentServiceName,
         template_css: cssContent,
         table_id: currentTable,
       }),
@@ -843,56 +846,109 @@ async function loadTemplatesList() {
       const container = document.getElementById("templatesList");
       if (!container) return;
 
+      container.innerHTML = "";
+
       if (data.templates.length === 0) {
         container.innerHTML = '<p class="fr-text--sm">Aucun template sauvegardé</p>';
         return;
       }
 
-      container.innerHTML = "";
-      data.templates.forEach((template) => {
+      data.templates.forEach((templateName) => {
         const item = document.createElement("div");
         item.className = "template-item";
-        item.innerHTML = `
-          <span onclick="loadTemplate('${template}')">${template}</span>
-          <button class="delete-template-btn" onclick="deleteTemplate('${template}')">×</button>
-        `;
+
+        // Nom cliquable du template
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = templateName;
+        nameSpan.style.cursor = "pointer";
+        nameSpan.onclick = () => loadTemplate(templateName);
+
+        // Bouton supprimer
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "×";
+        deleteBtn.className = "delete-template-btn";
+        deleteBtn.title = "Supprimer ce template";
+        deleteBtn.onclick = (e) => {
+          e.stopPropagation(); // empêche le chargement
+          deleteTemplate(templateName);
+        };
+
+        item.appendChild(nameSpan);
+        item.appendChild(deleteBtn);
         container.appendChild(item);
       });
     }
   } catch (error) {
     console.error("Erreur lors du chargement des templates:", error);
+    showNotification("Erreur lors du chargement des templates", "error");
   }
 }
 
+// Charger un template (avec encodage pour accents/espaces)
 async function loadTemplate(templateName) {
   if (!quill) return;
 
   try {
     showLoadingModal("Chargement du template...");
 
-    const response = await fetch(`/api/load-template/${templateName}`);
+    const response = await fetch("/api/load-template/" + templateName.replace(/ /g, "_"));
     const data = await response.json();
 
     if (data.success) {
-      quill.root.innerHTML = data.template.template_content;
+      const template = data.template;
+      quill.root.innerHTML = template.template_content || "";
       const cssEditor = document.getElementById("cssEditor");
       if (cssEditor) {
         cssEditor.value = data.template.template_css || "";
       }
 
-      if (data.table_id) {
+      // Logo
+      const logoPreview = document.getElementById("logoPreview");
+      if (data.template.logo) {
+        currentLogo = data.template.logo;
+        if (logoPreview) {
+          // Affiche le logo
+          logoPreview.innerHTML = `<img src="${currentLogo}" alt="Logo" style="max-height: 60px;">`;
+        }
+      } else {
+        currentLogo = null;
+        if (logoPreview) {
+          // Supprime l'affichage
+          logoPreview.innerHTML = "Aucun logo";
+        }
+      }
+
+      // Signature
+      const signaturePreview = document.getElementById("signaturePreview");
+      if (data.template.signature) {
+        currentSignature = data.template.signature;
+        if (signaturePreview) {
+          // Affiche la signature
+          signaturePreview.innerHTML = `<img src="${currentSignature}" alt="Signature" style="max-height: 60px;">`;
+        }
+      } else {
+        currentSignature = null;
+        if (signaturePreview) {
+          // Supprime l'affichage
+          signaturePreview.innerHTML = "Aucune signature";
+        }
+      }
+
+      // Table associée
+      if (data.template.table_id) {
         const tableSelect = document.getElementById("tableSelect");
         if (tableSelect) {
-          tableSelect.value = data.table_id;
+          tableSelect.value = data.template.table_id;
           await loadColumns();
         }
       }
 
-      showNotification("Template chargé avec succès", "success");
+      showNotification(`Template "${templateName}" chargé avec succès`, "success");
     } else {
       showNotification("Erreur lors du chargement du template", "error");
     }
   } catch (error) {
+    console.error(error);
     showNotification("Erreur lors du chargement du template", "error");
   } finally {
     hideLoadingModal();

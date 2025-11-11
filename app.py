@@ -305,37 +305,44 @@ def preview_document():
 @app.route('/api/save-template', methods=['POST'])
 def save_template():
     try:
-        data = request.get_json()
-        
+        data = request.get_json(force=True)
+
+        # Vérification des données reçues
         if not data:
             return jsonify({
                 'success': False,
                 'message': 'Aucune donnée reçue'
             }), 400
-        
+
         template_name = data.get('template_name')
         template_content = data.get('template_content')
         template_css = data.get('template_css', '')
         logo = data.get('logo')
         signature = data.get('signature')
         service_name = data.get('service_name')
-        
+
         if not template_name or not template_content:
             return jsonify({
                 'success': False,
                 'message': 'Nom et contenu du template requis'
             }), 400
-        
+
+        # Sauvegarde via ton module doc_gen
         filepath = doc_gen.save_template(
-            template_name, template_content, template_css, 
-            logo, signature, service_name
+            template_name=template_name,
+            template_content=template_content,
+            template_css=template_css,
+            logo=logo,
+            signature=signature,
+            service_name=service_name
         )
-        
+
         return jsonify({
             'success': True,
-            'message': 'Template sauvegardé avec succès',
+            'message': f'Template "{template_name}" sauvegardé avec succès',
             'filepath': filepath
         })
+
     except Exception as e:
         print(f"Erreur save_template: {e}")
         traceback.print_exc()
@@ -343,6 +350,7 @@ def save_template():
             'success': False,
             'message': f'Erreur: {str(e)}'
         }), 500
+
 
 
 @app.route('/api/templates', methods=['GET'])
@@ -362,14 +370,25 @@ def list_templates():
         }), 500
 
 
-@app.route('/api/template/<template_name>', methods=['GET'])
+# app.py
+
+@app.route('/api/load-template/<template_name>', methods=['GET'])
 def load_template(template_name):
     try:
+        # Décoder l'URL
+        from urllib.parse import unquote
+        template_name = unquote(template_name)
         template_data = doc_gen.load_template(template_name)
         return jsonify({
             'success': True,
             'template': template_data
         })
+    except FileNotFoundError:
+        # C'est la bonne façon de gérer un fichier non trouvé
+        return jsonify({
+            'success': False,
+            'message': 'Template introuvable'
+        }), 404
     except Exception as e:
         print(f"Erreur load_template: {e}")
         traceback.print_exc()
@@ -378,7 +397,7 @@ def load_template(template_name):
             'message': f'Erreur: {str(e)}'
         }), 500
 
-@app.route('/api/template/<template_name>', methods=['DELETE'])
+@app.route('/api/delete-template/<template_name>', methods=['DELETE'])
 def delete_template(template_name):
     try:
         filepath = doc_gen.delete_template(template_name)
