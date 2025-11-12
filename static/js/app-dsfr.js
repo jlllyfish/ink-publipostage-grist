@@ -82,20 +82,21 @@ function saveGristConfig() {
   if (apiKeyInput) gristApiKey = apiKeyInput.value;
   if (docIdInput) gristDocId = docIdInput.value;
 
-  // Sauvegarder dans localStorage
+  // 🆕 Sauvegarder dans sessionStorage (perdu à la fermeture de l'onglet)
   try {
-    localStorage.setItem("gristApiKey", gristApiKey);
-    localStorage.setItem("gristDocId", gristDocId);
-    showNotification("Configuration Grist sauvegardée", "success");
+    sessionStorage.setItem("gristApiKey", gristApiKey);
+    sessionStorage.setItem("gristDocId", gristDocId);
+    showNotification("Configuration Grist enregistrée pour cette session", "success");
   } catch (e) {
-    console.warn("LocalStorage non disponible");
+    console.warn("SessionStorage non disponible");
   }
 }
 
 function loadGristConfig() {
+  // 🆕 Charger depuis sessionStorage
   try {
-    const savedApiKey = localStorage.getItem("gristApiKey");
-    const savedDocId = localStorage.getItem("gristDocId");
+    const savedApiKey = sessionStorage.getItem("gristApiKey");
+    const savedDocId = sessionStorage.getItem("gristDocId");
 
     if (savedApiKey) {
       gristApiKey = savedApiKey;
@@ -109,8 +110,26 @@ function loadGristConfig() {
       if (docIdInput) docIdInput.value = savedDocId;
     }
   } catch (e) {
-    console.warn("LocalStorage non disponible");
+    console.warn("SessionStorage non disponible");
   }
+}
+
+// 🆕 VALIDATION DES IMAGES
+function validateImageFile(file) {
+  const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"];
+  const maxSize = 5 * 1024 * 1024; // 5 MB
+
+  if (!allowedTypes.includes(file.type)) {
+    showNotification("Format d'image non autorisé. Utilisez PNG, JPEG, GIF ou WebP.", "error");
+    return false;
+  }
+
+  if (file.size > maxSize) {
+    showNotification("Image trop volumineuse (max 5 MB)", "error");
+    return false;
+  }
+
+  return true;
 }
 
 async function testGristConnection() {
@@ -526,6 +545,12 @@ function loadFilterColumnName() {
 function handleLogo(event) {
   const file = event.target.files[0];
   if (file) {
+    // 🆕 VALIDER AVANT
+    if (!validateImageFile(file)) {
+      event.target.value = ""; // Reset input
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = function (e) {
       currentLogo = e.target.result;
@@ -541,6 +566,11 @@ function handleLogo(event) {
 function handleSignature(event) {
   const file = event.target.files[0];
   if (file) {
+    // 🆕 VALIDER AVANT
+    if (!validateImageFile(file)) {
+      event.target.value = ""; // Reset input
+      return;
+    }
     const reader = new FileReader();
     reader.onload = function (e) {
       currentSignature = e.target.result;
