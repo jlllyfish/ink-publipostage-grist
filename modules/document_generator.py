@@ -8,7 +8,8 @@ import re
 import base64
 import threading
 from typing import Dict, Any, List, Optional
-from jinja2 import Template, Environment
+from jinja2 import Template, Environment, select_autoescape
+from jinja2.sandbox import SandboxedEnvironment
 from datetime import datetime
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Playwright
 
@@ -61,8 +62,15 @@ class DocumentGenerator:
         self.templates_folder = templates_folder
         os.makedirs(templates_folder, exist_ok=True)
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.jinja_env = Environment()
-        self.jinja_env.filters['date_fr'] = self.format_date_fr
+        self.jinja_env = SandboxedEnvironment(
+            autoescape=select_autoescape(['html', 'xml']),
+            trim_blocks=True,
+            lstrip_blocks=True
+        )
+        # Liste blanche des filtres autorisés
+        self.jinja_env.filters = {
+            'date_fr': self.format_date_fr
+}
         
         # Charger les fonts en mÃ©moire
         self.fonts_cache = self._load_fonts_to_base64()
@@ -284,27 +292,14 @@ class DocumentGenerator:
     
     def load_template(self, template_name: str) -> Dict[str, Any]:
         """Charge un template sauvegardé"""
-        print(f"[LOAD] Template demandé: '{template_name}'")
-        
         safe_name = "".join(c for c in template_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
         safe_name = safe_name.replace(' ', '_')
         filepath = os.path.join(self.templates_folder, f"{safe_name}.json")
         
-        print(f"[LOAD] Chemin calculé: {filepath}")
-        print(f"[LOAD] Fichier existe: {os.path.exists(filepath)}")
-        
-        # Liste tous les fichiers du dossier
-        if os.path.exists(self.templates_folder):
-            print(f"[LOAD] Fichiers dans {self.templates_folder}:")
-            for f in os.listdir(self.templates_folder):
-                print(f"  - {f}")
-        
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"Template '{template_name}' introuvable à {filepath}")
-        
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
+        # ← AJOUTER cette transformation
         return {
             'template_content': data.get('content', ''),
             'template_css': data.get('css', ''),
@@ -346,8 +341,24 @@ class DocumentGenerator:
         return filepath
     
     def render_template(self, template_content: str, data: Dict[str, Any]) -> str:
-        """Remplace les variables dans le template par les donnÃ©es"""
+        """Remplace les variables dans le template par les données"""
         try:
+            # 🆕 VALIDATION: bloquer les tags dangereux
+            dangerous_patterns = [
+                r'{%\s*include',
+                r'{%\s*import',
+                r'{%\s*extends',
+                r'{%\s*from',
+                r'__',  # Accès aux attributs privés Python
+                r'\.mro',
+                r'\.subclasses',
+            ]
+            
+            for pattern in dangerous_patterns:
+                if re.search(pattern, template_content, re.IGNORECASE):
+                    raise ValueError(f"Template contient du code potentiellement dangereux: {pattern}")
+            
+            # Ce qui existait déjà (on garde)
             converted_data = self.convert_timestamps_in_data(data)
             template = self.jinja_env.from_string(template_content)
             return template.render(**converted_data)
