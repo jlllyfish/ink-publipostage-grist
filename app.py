@@ -10,6 +10,10 @@ import traceback
 from flask import Flask, render_template, request, jsonify, send_file
 from dotenv import load_dotenv
 from modules.grist_connector import GristConnector
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.utils import secure_filename
+import hashlib
 from io import BytesIO
 import time
 from modules.document_generator import DocumentGenerator, generate_filename_from_pattern
@@ -17,10 +21,27 @@ from modules.document_generator import DocumentGenerator, generate_filename_from
 load_dotenv()
 os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
 
+# 🆕 VÉRIFICATION SECRET_KEY
+if not os.getenv('FLASK_SECRET_KEY') or os.getenv('FLASK_SECRET_KEY') == 'dev-secret-key':
+    print("⚠️ WARNING: SECRET_KEY non définie ou invalide!")
+    if os.getenv('FLASK_ENV') == 'production':
+        raise ValueError("SECRET_KEY must be set in production!")
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key')
 app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER', 'uploads')
 app.config['TEMPLATES_FOLDER'] = os.getenv('TEMPLATES_FOLDER', 'templates_publipostage')
+
+# 🆕 RATE LIMITING
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
+# 🆕 TAILLE MAX UPLOAD (10 MB)
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['TEMPLATES_FOLDER'], exist_ok=True)
@@ -45,6 +66,39 @@ def create_grist_instance(api_key, doc_id):
     except Exception as e:
         print(f"✗ Erreur création instance Grist : {e}")
         return None
+
+# 🆕 HEADERS DE SÉCURITÉ
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    # CSP basique desactivé
+    # response.headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; img-src 'self' data: https:;"
+    return response
+
+# 🆕 VALIDATION DES IMAGES
+def validate_image(base64_string):
+    """Valide qu'une image base64 est sûre"""
+    if not base64_string or not base64_string.startswith('data:image/'):
+        return False
+    
+    try:
+        # Extraire le type MIME
+        mime_type = base64_string.split(';')[0].split(':')[1]
+        allowed_types = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp']
+        
+        if mime_type not in allowed_types:
+            return False
+        
+        # Vérifier la taille (max 5MB en base64)
+        if len(base64_string) > 5 * 1024 * 1024 * 1.37:  # base64 = +37% de taille
+            return False
+        
+        return True
+    except:
+        return False
 
 
 @app.route('/')
@@ -303,11 +357,11 @@ def preview_document():
 
 
 @app.route('/api/save-template', methods=['POST'])
+@limiter.limit("10 per minute")  # 🆕 Rate limit
 def save_template():
     try:
         data = request.get_json(force=True)
 
-        # Vérification des données reçues
         if not data:
             return jsonify({
                 'success': False,
@@ -326,8 +380,20 @@ def save_template():
                 'success': False,
                 'message': 'Nom et contenu du template requis'
             }), 400
+        
+        # 🆕 VALIDER LES IMAGES
+        if logo and not validate_image(logo):
+            return jsonify({
+                'success': False,
+                'message': 'Logo invalide ou trop volumineux'
+            }), 400
+        
+        if signature and not validate_image(signature):
+            return jsonify({
+                'success': False,
+                'message': 'Signature invalide ou trop volumineuse'
+            }), 400
 
-        # Sauvegarde via ton module doc_gen
         filepath = doc_gen.save_template(
             template_name=template_name,
             template_content=template_content,
@@ -419,6 +485,7 @@ def delete_template(template_name):
         }), 500
 
 @app.route('/api/generate-pdf', methods=['POST'])
+@limiter.limit("30 per hour")
 def generate_pdf():
     try:
         data = request.get_json()
@@ -492,6 +559,7 @@ def generate_pdf():
 
 # 🆕 MODIFIÉ : Accepte api_key et doc_id
 @app.route('/api/generate-multiple', methods=['POST'])
+@limiter.limit("5 per hour")
 def generate_multiple():
     try:
         data = request.get_json()
