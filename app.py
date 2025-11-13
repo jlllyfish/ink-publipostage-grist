@@ -71,11 +71,10 @@ def create_grist_instance(api_key, doc_id):
 @app.after_request
 def set_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'DENY'
+    # 🆕 Autoriser iframe depuis Grist et Scalingo
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-    # CSP basique desactivé
-    # response.headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; img-src 'self' data: https:;"
     return response
 
 # 🆕 VALIDATION DES IMAGES
@@ -736,4 +735,5 @@ if __name__ == '__main__':
         host='0.0.0.0',
         port=5000,
         use_reloader=False
+
     )
