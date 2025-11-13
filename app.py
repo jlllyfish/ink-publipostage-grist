@@ -71,10 +71,11 @@ def create_grist_instance(api_key, doc_id):
 @app.after_request
 def set_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    # 🆕 Autoriser iframe depuis Grist et Scalingo
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    
+    # 🆕 Autoriser iframe uniquement depuis Grist
+    response.headers['Content-Security-Policy'] = "frame-ancestors 'self' https://grist.numerique.gouv.fr https://*.grist.numerique.gouv.fr;"
     return response
 
 # 🆕 VALIDATION DES IMAGES
@@ -737,3 +738,4 @@ if __name__ == '__main__':
         use_reloader=False
 
     )
+
