@@ -789,6 +789,7 @@ async function generateMultiplePDF() {
         template_content: htmlContent,
         template_css: cssContent,
         apply_filter: filterEnabled,
+        filter_column: filterColumnName,
         filename_pattern: filenamePattern,
         logo: currentLogo,
         service_name: currentServiceName,
