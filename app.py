@@ -578,6 +578,9 @@ def generate_multiple():
         service_name = data.get('service_name')
         filename_pattern = data.get('filename_pattern', 'document_{index}')
         apply_filter = data.get('apply_filter', False)
+
+        # ✅ RÉCUPÉRER filter_column depuis le POST (priorité) ou depuis la config (fallback)
+        filter_column = data.get('filter_column') or app.config.get('PDF_FILTER_COLUMN', 'Pdf_print')
         
         # 🆕 RÉCUPÉRER LES CREDENTIALS
         api_key = data.get('api_key')
@@ -614,8 +617,6 @@ def generate_multiple():
         total_records = len(records)
         
         if apply_filter:
-            filter_column = app.config.get('PDF_FILTER_COLUMN', 'Pdf_print')
-            
             filtered_records = []
             for i, record in enumerate(records, 1):
                 value = record.get(filter_column)
@@ -736,6 +737,4 @@ if __name__ == '__main__':
         host='0.0.0.0',
         port=5000,
         use_reloader=False
-
     )
-
