@@ -50,7 +50,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialisation de l'application
   testConnection();
   loadTables();
-  loadTemplatesList();
   loadFilterColumnName();
 
   // Événements
@@ -82,7 +81,6 @@ function saveGristConfig() {
   if (apiKeyInput) gristApiKey = apiKeyInput.value;
   if (docIdInput) gristDocId = docIdInput.value;
 
-  // 🆕 Sauvegarder dans sessionStorage (perdu à la fermeture de l'onglet)
   try {
     sessionStorage.setItem("gristApiKey", gristApiKey);
     sessionStorage.setItem("gristDocId", gristDocId);
@@ -90,10 +88,12 @@ function saveGristConfig() {
   } catch (e) {
     console.warn("SessionStorage non disponible");
   }
+
+  // ✅ Recharger les templates automatiquement
+  loadTemplatesList();
 }
 
 function loadGristConfig() {
-  // 🆕 Charger depuis sessionStorage
   try {
     const savedApiKey = sessionStorage.getItem("gristApiKey");
     const savedDocId = sessionStorage.getItem("gristDocId");
@@ -108,6 +108,9 @@ function loadGristConfig() {
       gristDocId = savedDocId;
       const docIdInput = document.getElementById("gristDocId");
       if (docIdInput) docIdInput.value = savedDocId;
+
+      // ✅ Charger les templates si doc_id existe
+      loadTemplatesList();
     }
   } catch (e) {
     console.warn("SessionStorage non disponible");
