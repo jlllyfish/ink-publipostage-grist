@@ -852,6 +852,7 @@ async function saveTemplate() {
         service_name: currentServiceName,
         template_css: cssContent,
         table_id: currentTable,
+        doc_id: gristDocId, // ✅ AJOUTER CETTE LIGNE
       }),
     });
 
@@ -870,7 +871,13 @@ async function saveTemplate() {
 
 async function loadTemplatesList() {
   try {
-    const response = await fetch("/api/templates");
+    const response = await fetch("/api/templates", {
+      method: "POST", // ✅ CHANGER GET → POST
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        doc_id: gristDocId, // ✅ AJOUTER doc_id
+      }),
+    });
     const data = await response.json();
 
     if (data.success) {
@@ -888,19 +895,17 @@ async function loadTemplatesList() {
         const item = document.createElement("div");
         item.className = "template-item";
 
-        // Nom cliquable du template
         const nameSpan = document.createElement("span");
         nameSpan.textContent = templateName;
         nameSpan.style.cursor = "pointer";
         nameSpan.onclick = () => loadTemplate(templateName);
 
-        // Bouton supprimer
         const deleteBtn = document.createElement("button");
         deleteBtn.textContent = "×";
         deleteBtn.className = "delete-template-btn";
         deleteBtn.title = "Supprimer ce template";
         deleteBtn.onclick = (e) => {
-          e.stopPropagation(); // empêche le chargement
+          e.stopPropagation();
           deleteTemplate(templateName);
         };
 
@@ -922,7 +927,13 @@ async function loadTemplate(templateName) {
   try {
     showLoadingModal("Chargement du template...");
 
-    const response = await fetch("/api/load-template/" + templateName.replace(/ /g, "_"));
+    const response = await fetch("/api/load-template/" + templateName.replace(/ /g, "_"), {
+      method: "POST", // ✅ CHANGER GET → POST
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        doc_id: gristDocId, // ✅ AJOUTER doc_id
+      }),
+    });
     const data = await response.json();
 
     if (data.success) {
@@ -938,13 +949,11 @@ async function loadTemplate(templateName) {
       if (data.template.logo) {
         currentLogo = data.template.logo;
         if (logoPreview) {
-          // Affiche le logo
           logoPreview.innerHTML = `<img src="${currentLogo}" alt="Logo" style="max-height: 60px;">`;
         }
       } else {
         currentLogo = null;
         if (logoPreview) {
-          // Supprime l'affichage
           logoPreview.innerHTML = "Aucun logo";
         }
       }
@@ -954,13 +963,11 @@ async function loadTemplate(templateName) {
       if (data.template.signature) {
         currentSignature = data.template.signature;
         if (signaturePreview) {
-          // Affiche la signature
           signaturePreview.innerHTML = `<img src="${currentSignature}" alt="Signature" style="max-height: 60px;">`;
         }
       } else {
         currentSignature = null;
         if (signaturePreview) {
-          // Supprime l'affichage
           signaturePreview.innerHTML = "Aucune signature";
         }
       }
@@ -992,6 +999,10 @@ async function deleteTemplate(templateName) {
   try {
     const response = await fetch(`/api/delete-template/${templateName}`, {
       method: "DELETE",
+      headers: { "Content-Type": "application/json" }, // ✅ AJOUTER
+      body: JSON.stringify({
+        doc_id: gristDocId, // ✅ AJOUTER doc_id
+      }),
     });
 
     const data = await response.json();
