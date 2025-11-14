@@ -420,11 +420,10 @@ def save_template():
 
 
 
-@app.route('/api/templates', methods=['POST'])  # ✅ CHANGER GET en POST
+@app.route('/api/templates', methods=['GET'])  # ✅ Garder GET
 def list_templates():
     try:
-        data = request.get_json()
-        doc_id = data.get('doc_id') if data else None  # ✅ AJOUTER
+        doc_id = request.args.get('doc_id')  # ✅ Query parameter
         
         templates = doc_gen.list_templates(doc_id=doc_id)  # ✅ AJOUTER doc_id
         return jsonify({
@@ -442,14 +441,13 @@ def list_templates():
 
 # app.py
 
-@app.route('/api/load-template/<template_name>', methods=['POST'])  # ✅ CHANGER GET en POST
+@app.route('/api/load-template/<template_name>', methods=['GET'])  # ✅ Garder GET
 def load_template(template_name):
     try:
         from urllib.parse import unquote
         template_name = unquote(template_name)
         
-        data = request.get_json()  # ✅ AJOUTER
-        doc_id = data.get('doc_id') if data else None  # ✅ AJOUTER
+        doc_id = request.args.get('doc_id')  # ✅ Query parameter
         
         template_data = doc_gen.load_template(template_name, doc_id=doc_id)  # ✅ AJOUTER doc_id
         return jsonify({
@@ -472,8 +470,7 @@ def load_template(template_name):
 @app.route('/api/delete-template/<template_name>', methods=['DELETE'])
 def delete_template(template_name):
     try:
-        data = request.get_json()  # ✅ AJOUTER
-        doc_id = data.get('doc_id') if data else None  # ✅ AJOUTER
+        doc_id = request.args.get('doc_id')  # ✅ Query parameter
         
         filepath = doc_gen.delete_template(template_name, doc_id=doc_id)  # ✅ AJOUTER doc_id
         return jsonify({
