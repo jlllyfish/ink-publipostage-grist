@@ -1,17 +1,20 @@
+# -*- coding: utf-8 -*-
 """
-Module de gÃ©nÃ©ration de documents pour le publipostage
-Version simplifiÃ©e avec style "pied de page" dans l'Ã©diteur
+Module de génération de documents pour le publipostage
+Version avec stockage PostgreSQL
 """
 import os
-import json
 import re
 import base64
 import threading
 from typing import Dict, Any, List, Optional
-from jinja2 import Template, Environment, select_autoescape
+from jinja2 import Environment, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
 from datetime import datetime
-from playwright.sync_api import sync_playwright, Browser, BrowserContext, Playwright
+from playwright.sync_api import sync_playwright, BrowserContext
+
+# ✅ IMPORTER LE NOUVEAU MODULE
+from modules.template_storage import DatabaseTemplateStorage
 
 
 def sanitize_filename(filename: str) -> str:
@@ -31,7 +34,7 @@ def sanitize_filename(filename: str) -> str:
 
 
 def generate_filename_from_pattern(pattern: str, data: Dict[str, Any], index: int = None) -> str:
-    """GÃ©nÃ¨re un nom de fichier Ã  partir d'un pattern et des donnÃ©es"""
+    """Génère un nom de fichier à partir d'un pattern et des données"""
     if not pattern or pattern.strip() == '':
         pattern = "document"
     
@@ -55,12 +58,18 @@ def generate_filename_from_pattern(pattern: str, data: Dict[str, Any], index: in
 
 
 class DocumentGenerator:
-    """GÃ¨re la gÃ©nÃ©ration de documents de publipostage avec Playwright thread-safe"""
+    """Gère la génération de documents de publipostage avec Playwright thread-safe"""
     
-    def __init__(self, templates_folder: str):
-        """Initialise le gÃ©nÃ©rateur de documents"""
-        self.templates_folder = templates_folder
-        os.makedirs(templates_folder, exist_ok=True)
+    def __init__(self, templates_folder: str = None):
+        """
+        Initialise le générateur de documents
+        
+        Args:
+            templates_folder: Ignoré, conservé pour compatibilité
+        """
+        # ✅ INITIALISER LE STOCKAGE POSTGRESQL
+        self.template_storage = DatabaseTemplateStorage()
+        
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.jinja_env = SandboxedEnvironment(
             autoescape=select_autoescape(['html', 'xml']),
@@ -70,20 +79,20 @@ class DocumentGenerator:
         # Liste blanche des filtres autorisés
         self.jinja_env.filters = {
             'date_fr': self.format_date_fr
-}
+        }
         
-        # Charger les fonts en mÃ©moire
+        # Charger les fonts en mémoire
         self.fonts_cache = self._load_fonts_to_base64()
         
         # Pool de navigateurs par thread
         self._thread_local = threading.local()
         
-        print("âœ… GÃ©nÃ©rateur PDF initialisÃ© avec Playwright (thread-safe)")
+        print("✅ Générateur PDF initialisé avec Playwright (thread-safe)")
     
     def _get_browser_context(self) -> BrowserContext:
-        """RÃ©cupÃ¨re ou crÃ©e un contexte de navigateur pour le thread actuel"""
+        """Récupère ou crée un contexte de navigateur pour le thread actuel"""
         if not hasattr(self._thread_local, 'context') or self._thread_local.context is None:
-            print(f"[BROWSER] ðŸš€ Initialisation du navigateur pour le thread {threading.current_thread().name}")
+            print(f"[BROWSER] 🚀 Initialisation du navigateur pour le thread {threading.current_thread().name}")
             
             try:
                 self._thread_local.playwright = sync_playwright().start()
@@ -97,9 +106,9 @@ class DocumentGenerator:
                     ]
                 )
                 self._thread_local.context = self._thread_local.browser.new_context()
-                print(f"[BROWSER] âœ… Navigateur prÃªt pour le thread {threading.current_thread().name}")
+                print(f"[BROWSER] ✅ Navigateur prêt pour le thread {threading.current_thread().name}")
             except Exception as e:
-                print(f"[BROWSER] âŒ Erreur lors de l'initialisation : {e}")
+                print(f"[BROWSER] ❌ Erreur lors de l'initialisation : {e}")
                 raise
         
         return self._thread_local.context
@@ -119,7 +128,7 @@ class DocumentGenerator:
                 self._thread_local.playwright.stop()
                 self._thread_local.playwright = None
         except Exception as e:
-            print(f"[BROWSER] âš ï¸ Erreur lors du nettoyage : {e}")
+            print(f"[BROWSER] ⚠️ Erreur lors du nettoyage : {e}")
     
     def _load_fonts_to_base64(self) -> Dict[str, str]:
         """Charge les fichiers de fonts et les convertit en Base64"""
@@ -127,7 +136,7 @@ class DocumentGenerator:
         fonts_dir = os.path.join(self.base_dir, 'static', 'fonts')
         
         if not os.path.exists(fonts_dir):
-            print(f"[FONTS] âš ï¸ Dossier fonts introuvable: {fonts_dir}")
+            print(f"[FONTS] ⚠️ Dossier fonts introuvable: {fonts_dir}")
             return fonts_cache
         
         font_files = {
@@ -146,14 +155,14 @@ class DocumentGenerator:
                         mime_type = 'font/woff2' if filename.endswith('.woff2') else 'font/woff'
                         base64_data = base64.b64encode(font_data).decode('utf-8')
                         fonts_cache[key] = f"data:{mime_type};base64,{base64_data}"
-                        print(f"[FONTS] âœ… {filename} chargÃ©e ({len(font_data)} octets)")
+                        print(f"[FONTS] ✅ {filename} chargée ({len(font_data)} octets)")
                 except Exception as e:
-                    print(f"[FONTS] âŒ Erreur lors du chargement de {filename}: {e}")
+                    print(f"[FONTS] ❌ Erreur lors du chargement de {filename}: {e}")
         
         return fonts_cache
     
     def is_timestamp(self, value: Any) -> bool:
-        """DÃ©tecte si une valeur est un timestamp Unix"""
+        """Détecte si une valeur est un timestamp Unix"""
         if isinstance(value, bool):
             return False
         
@@ -163,7 +172,7 @@ class DocumentGenerator:
         return False
     
     def format_date_fr(self, value: Any, format: str = "%d/%m/%Y") -> str:
-        """Formate une date en franÃ§ais"""
+        """Formate une date en français"""
         try:
             if isinstance(value, datetime):
                 return value.strftime(format)
@@ -183,7 +192,7 @@ class DocumentGenerator:
             return str(value)
     
     def convert_timestamps_in_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Convertit automatiquement tous les timestamps Unix en dates franÃ§aises"""
+        """Convertit automatiquement tous les timestamps Unix en dates françaises"""
         converted_data = {}
         
         for key, value in data.items():
@@ -199,7 +208,7 @@ class DocumentGenerator:
         return converted_data
     
     def get_font_face_css(self) -> str:
-        """GÃ©nÃ¨re le CSS @font-face avec fonts embarquÃ©es en Base64"""
+        """Génère le CSS @font-face avec fonts embarquées en Base64"""
         if not self.fonts_cache:
             return ""
         
@@ -225,7 +234,7 @@ class DocumentGenerator:
     
     def generate_entete_with_logo(self, logo_data_url: Optional[str] = None, 
                                    service_name: Optional[str] = None) -> str:
-        """GÃ©nÃ¨re l'en-tÃªte avec le logo Ã  gauche et le nom du service Ã  droite"""
+        """Génère l'en-tête avec le logo à gauche et le nom du service à droite"""
         if not logo_data_url and not service_name:
             return ""
         
@@ -251,7 +260,7 @@ class DocumentGenerator:
         return entete
     
     def generate_signature(self, signature_data_url: Optional[str] = None) -> str:
-        """GÃ©nÃ¨re la signature ancrÃ©e au contenu"""
+        """Génère la signature ancrée au contenu"""
         if not signature_data_url:
             return ""
         
@@ -263,93 +272,46 @@ class DocumentGenerator:
         
         return signature
     
+    # ✅ DÉLÉGUER AU STORAGE
     def save_template(self, template_name: str, template_content: str, 
                  template_css: str = "", logo: Optional[str] = None,
                  signature: Optional[str] = None,
                  service_name: Optional[str] = None) -> str:
-        """Sauvegarde un template de publipostage"""
-        template_data = {
-            'name': template_name,
-            'content': template_content,
-            'css': template_css,
-            'logo': logo,
-            'signature': signature,
-            'service_name': service_name,
-            'created_at': datetime.now().isoformat(),
-            'updated_at': datetime.now().isoformat()
-        }
-        
-        safe_name = "".join(c for c in template_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-        safe_name = safe_name.replace(' ', '_')
-        filepath = os.path.join(self.templates_folder, f"{safe_name}.json")
-        
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(template_data, f, ensure_ascii=False, indent=2)
-        
-        print(f"âœ… Template sauvegardÃ©: {filepath}")
-        
-        return filepath
+        """Sauvegarde un template (délégué à DatabaseTemplateStorage)"""
+        return self.template_storage.save_template(
+            template_name=template_name,
+            template_content=template_content,
+            template_css=template_css,
+            logo=logo,
+            signature=signature,
+            service_name=service_name
+        )
     
+    # ✅ DÉLÉGUER AU STORAGE
     def load_template(self, template_name: str) -> Dict[str, Any]:
-        """Charge un template sauvegardé"""
-        safe_name = "".join(c for c in template_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-        safe_name = safe_name.replace(' ', '_')
-        filepath = os.path.join(self.templates_folder, f"{safe_name}.json")
-        
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        # ← AJOUTER cette transformation
-        return {
-            'template_content': data.get('content', ''),
-            'template_css': data.get('css', ''),
-            'logo': data.get('logo'),
-            'signature': data.get('signature'),
-            'service_name': data.get('service_name'),
-            'table_id': data.get('table_id')
-        }
+        """Charge un template (délégué à DatabaseTemplateStorage)"""
+        return self.template_storage.load_template(template_name)
     
+    # ✅ DÉLÉGUER AU STORAGE
     def list_templates(self) -> List[str]:
-        """Liste tous les templates disponibles"""
-        templates = []
-        if not os.path.exists(self.templates_folder):
-            return templates
-            
-        for filename in os.listdir(self.templates_folder):
-            if filename.endswith('.json'):
-                try:
-                    with open(os.path.join(self.templates_folder, filename), 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        templates.append(data['name'])
-                except Exception as e:
-                    continue
-        return templates
+        """Liste tous les templates (délégué à DatabaseTemplateStorage)"""
+        return self.template_storage.list_templates()
     
-     # âœ… AJOUTEZ CETTE NOUVELLE MÃ‰THODE ICI
+    # ✅ DÉLÉGUER AU STORAGE
     def delete_template(self, template_name: str) -> str:
-        """Supprime un template sauvegardÃ©"""
-        safe_name = "".join(c for c in template_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-        safe_name = safe_name.replace(' ', '_')
-        filepath = os.path.join(self.templates_folder, f"{safe_name}.json")
-        
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"Template '{template_name}' introuvable")
-        
-        os.remove(filepath)
-        print(f"ðŸ—‘ï¸ Template supprimÃ©: {filepath}")
-        
-        return filepath
+        """Supprime un template (délégué à DatabaseTemplateStorage)"""
+        return self.template_storage.delete_template(template_name)
     
     def render_template(self, template_content: str, data: Dict[str, Any]) -> str:
         """Remplace les variables dans le template par les données"""
         try:
-            # 🆕 VALIDATION: bloquer les tags dangereux
+            # Validation: bloquer les tags dangereux
             dangerous_patterns = [
                 r'{%\s*include',
                 r'{%\s*import',
                 r'{%\s*extends',
                 r'{%\s*from',
-                r'__',  # Accès aux attributs privés Python
+                r'__',
                 r'\.mro',
                 r'\.subclasses',
             ]
@@ -358,7 +320,6 @@ class DocumentGenerator:
                 if re.search(pattern, template_content, re.IGNORECASE):
                     raise ValueError(f"Template contient du code potentiellement dangereux: {pattern}")
             
-            # Ce qui existait déjà (on garde)
             converted_data = self.convert_timestamps_in_data(data)
             template = self.jinja_env.from_string(template_content)
             return template.render(**converted_data)
@@ -370,7 +331,7 @@ class DocumentGenerator:
                   data: Dict[str, Any], logo: Optional[str] = None,
                   signature: Optional[str] = None,
                   service_name: Optional[str] = None) -> str:
-        """GÃ©nÃ¨re le HTML complet avec CSS, logo, service et signature"""
+        """Génère le HTML complet avec CSS, logo, service et signature"""
         try:
             rendered_content = self.render_template(template_content, data)
             
@@ -396,6 +357,7 @@ class DocumentGenerator:
             line-height: 1.6;
             color: #000000;
             margin: 2cm;
+            position: relative;
         }}
         
         p {{
@@ -420,7 +382,7 @@ class DocumentGenerator:
             font-size: 24pt;
         }}
         
-        /* Style "pied de page" pour l'Ã©diteur */
+        /* Style "pied de page" pour l'éditeur */
         .footer-style {{
             font-family: 'Marianne', sans-serif !important;
             font-size: 8pt !important;
@@ -531,11 +493,11 @@ class DocumentGenerator:
             
             return html
         except Exception as e:
-            print(f"Erreur lors de la gÃ©nÃ©ration du HTML: {e}")
+            print(f"Erreur lors de la génération du HTML: {e}")
             raise
     
     def generate_pdf(self, html_content: str, output_path: str) -> str:
-        """GÃ©nÃ¨re un PDF Ã  partir du HTML avec Playwright"""
+        """Génère un PDF à partir du HTML avec Playwright"""
         try:
             output_dir = os.path.dirname(output_path)
             if output_dir and not os.path.exists(output_dir):
@@ -566,13 +528,13 @@ class DocumentGenerator:
             
             if os.path.exists(output_path):
                 file_size = os.path.getsize(output_path)
-                print(f"[PDF] âœ… Fichier crÃ©Ã©: {output_path} ({file_size} octets)")
+                print(f"[PDF] ✅ Fichier créé: {output_path} ({file_size} octets)")
                 return output_path
             else:
-                raise Exception(f"Le fichier PDF n'a pas Ã©tÃ© crÃ©Ã©: {output_path}")
+                raise Exception(f"Le fichier PDF n'a pas été créé: {output_path}")
             
         except Exception as e:
-            print(f"[PDF] âŒ Erreur: {e}")
+            print(f"[PDF] ❌ Erreur: {e}")
             import traceback
             traceback.print_exc()
             raise
@@ -584,7 +546,7 @@ class DocumentGenerator:
                                signature: Optional[str] = None,
                                service_name: Optional[str] = None,
                                filename_pattern: str = "document_{index}") -> List[str]:
-        """GÃ©nÃ¨re plusieurs documents Ã  partir d'une liste d'enregistrements"""
+        """Génère plusieurs documents à partir d'une liste d'enregistrements"""
         output_folder = os.path.abspath(output_folder)
         os.makedirs(output_folder, exist_ok=True)
         
@@ -606,7 +568,7 @@ class DocumentGenerator:
                         generated_files.append(output_path)
                         
                 except Exception as e:
-                    print(f"[BATCH] âŒ Erreur document {i}: {e}")
+                    print(f"[BATCH] ❌ Erreur document {i}: {e}")
                     continue
         finally:
             self._cleanup_thread_browser()
