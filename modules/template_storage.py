@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Module de stockage des templates en base de données PostgreSQL
+Version avec isolation par doc_id
 """
 import os
 import psycopg2
@@ -10,7 +11,7 @@ from datetime import datetime
 
 
 class DatabaseTemplateStorage:
-    """Gestion du stockage des templates dans PostgreSQL"""
+    """Gestion du stockage des templates dans PostgreSQL avec isolation par doc_id"""
     
     def __init__(self, db_url: str = None):
         """
@@ -26,7 +27,7 @@ class DatabaseTemplateStorage:
         
         # Tester la connexion
         self._test_connection()
-        print("✅ Stockage PostgreSQL initialisé")
+        print("✅ Stockage PostgreSQL initialisé (avec isolation par doc_id)")
     
     def _test_connection(self):
         """Teste la connexion et crée la table si nécessaire"""
@@ -81,21 +82,58 @@ class DatabaseTemplateStorage:
         """Retourne une nouvelle connexion à la base de données"""
         return psycopg2.connect(self.db_url)
     
+    def _make_unique_name(self, template_name: str, doc_id: str = None) -> str:
+        """
+        Crée un nom unique en préfixant avec doc_id
+        
+        Args:
+            template_name: Nom du template saisi par l'utilisateur
+            doc_id: ID du document Grist (pour isolation)
+        
+        Returns:
+            Nom unique préfixé (ex: "ABC123_Facture")
+        """
+        # Nettoyer le nom
+        safe_name = "".join(c for c in template_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        safe_name = safe_name.replace(' ', '_')
+        
+        # ✅ Préfixer avec doc_id si fourni
+        if doc_id and doc_id.strip():
+            return f"{doc_id}_{safe_name}"
+        
+        return safe_name
+    
+    def _strip_doc_id_prefix(self, unique_name: str, doc_id: str = None) -> str:
+        """
+        Retire le préfixe doc_id du nom pour l'affichage
+        
+        Args:
+            unique_name: Nom stocké en base (ex: "ABC123_Facture")
+            doc_id: ID du document Grist
+        
+        Returns:
+            Nom sans préfixe (ex: "Facture")
+        """
+        if doc_id and unique_name.startswith(f"{doc_id}_"):
+            return unique_name[len(doc_id) + 1:]  # +1 pour le underscore
+        return unique_name
+    
     def save_template(self, template_name: str, template_content: str, 
                       template_css: str = "", logo: str = None,
                       signature: str = None, service_name: str = None,
-                      table_id: str = None) -> str:
+                      table_id: str = None, doc_id: str = None) -> str:
         """
-        Sauvegarde un template dans PostgreSQL
+        Sauvegarde un template dans PostgreSQL avec isolation par doc_id
         
         Args:
-            template_name: Nom du template
+            template_name: Nom du template (sera préfixé avec doc_id)
             template_content: Contenu HTML
             template_css: CSS personnalisé
             logo: Logo en base64
             signature: Signature en base64
             service_name: Nom du service
             table_id: ID de la table Grist associée
+            doc_id: ID du document Grist (pour isolation) ✅ NOUVEAU
         
         Returns:
             Message de confirmation
@@ -104,9 +142,10 @@ class DatabaseTemplateStorage:
         cur = conn.cursor()
         
         try:
-            # Nettoyer le nom (identique à la version fichiers)
-            safe_name = "".join(c for c in template_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            safe_name = safe_name.replace(' ', '_')
+            # ✅ Créer un nom unique avec doc_id
+            unique_name = self._make_unique_name(template_name, doc_id)
+            
+            print(f"[STORAGE] Sauvegarde: '{template_name}' → '{unique_name}'")
             
             # INSERT ou UPDATE si existe déjà
             cur.execute("""
@@ -123,7 +162,7 @@ class DatabaseTemplateStorage:
                     updated_at = NOW()
                 RETURNING id;
             """, (
-                safe_name,
+                unique_name,
                 template_content,
                 template_css or '',
                 logo,
@@ -135,7 +174,7 @@ class DatabaseTemplateStorage:
             template_id = cur.fetchone()[0]
             conn.commit()
             
-            print(f"✅ Template '{safe_name}' sauvegardé (ID: {template_id})")
+            print(f"✅ Template '{template_name}' sauvegardé (ID: {template_id}, doc_id: {doc_id})")
             
             return f"database://templates/{template_id}"
             
@@ -147,12 +186,13 @@ class DatabaseTemplateStorage:
             cur.close()
             conn.close()
     
-    def load_template(self, template_name: str) -> Dict[str, Any]:
+    def load_template(self, template_name: str, doc_id: str = None) -> Dict[str, Any]:
         """
-        Charge un template depuis PostgreSQL
+        Charge un template depuis PostgreSQL avec isolation par doc_id
         
         Args:
-            template_name: Nom du template
+            template_name: Nom du template (sans préfixe)
+            doc_id: ID du document Grist (pour isolation) ✅ NOUVEAU
         
         Returns:
             Dictionnaire avec les données du template
@@ -164,20 +204,23 @@ class DatabaseTemplateStorage:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
         try:
-            # Nettoyer le nom
-            safe_name = "".join(c for c in template_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            safe_name = safe_name.replace(' ', '_')
+            # ✅ Créer le nom unique avec doc_id
+            unique_name = self._make_unique_name(template_name, doc_id)
+            
+            print(f"[STORAGE] Chargement: '{template_name}' → '{unique_name}'")
             
             cur.execute("""
                 SELECT content, css, logo, signature, service_name, table_id
                 FROM templates 
                 WHERE name = %s
-            """, (safe_name,))
+            """, (unique_name,))
             
             row = cur.fetchone()
             
             if not row:
-                raise FileNotFoundError(f"Template '{template_name}' introuvable")
+                raise FileNotFoundError(f"Template '{template_name}' introuvable (doc_id: {doc_id})")
+            
+            print(f"✅ Template '{template_name}' chargé")
             
             return {
                 'template_content': row['content'],
@@ -192,36 +235,61 @@ class DatabaseTemplateStorage:
             cur.close()
             conn.close()
     
-    def list_templates(self) -> List[str]:
+    def list_templates(self, doc_id: str = None) -> List[str]:
         """
-        Liste tous les templates disponibles
+        Liste tous les templates disponibles pour un doc_id
+        
+        Args:
+            doc_id: ID du document Grist (pour filtrage) ✅ NOUVEAU
         
         Returns:
-            Liste des noms de templates (triés par date de modification)
+            Liste des noms de templates (sans préfixe doc_id, triés par date)
         """
         conn = self._get_connection()
         cur = conn.cursor()
         
         try:
-            cur.execute("""
-                SELECT name 
-                FROM templates 
-                ORDER BY updated_at DESC
-            """)
+            if doc_id and doc_id.strip():
+                # ✅ Filtrer par doc_id
+                pattern = f"{doc_id}_%"
+                print(f"[STORAGE] Liste templates pour doc_id: {doc_id}")
+                
+                cur.execute("""
+                    SELECT name 
+                    FROM templates 
+                    WHERE name LIKE %s
+                    ORDER BY updated_at DESC
+                """, (pattern,))
+            else:
+                # Mode legacy: tous les templates
+                print("[STORAGE] Liste TOUS les templates (aucun doc_id)")
+                
+                cur.execute("""
+                    SELECT name 
+                    FROM templates 
+                    ORDER BY updated_at DESC
+                """)
             
-            templates = [row[0] for row in cur.fetchall()]
+            results = cur.fetchall()
+            
+            # ✅ Retirer le préfixe doc_id pour l'affichage
+            templates = [self._strip_doc_id_prefix(row[0], doc_id) for row in results]
+            
+            print(f"✅ {len(templates)} template(s) trouvé(s)")
+            
             return templates
             
         finally:
             cur.close()
             conn.close()
     
-    def delete_template(self, template_name: str) -> str:
+    def delete_template(self, template_name: str, doc_id: str = None) -> str:
         """
-        Supprime un template
+        Supprime un template avec isolation par doc_id
         
         Args:
-            template_name: Nom du template à supprimer
+            template_name: Nom du template (sans préfixe)
+            doc_id: ID du document Grist (pour isolation) ✅ NOUVEAU
         
         Returns:
             Message de confirmation
@@ -233,24 +301,25 @@ class DatabaseTemplateStorage:
         cur = conn.cursor()
         
         try:
-            # Nettoyer le nom
-            safe_name = "".join(c for c in template_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            safe_name = safe_name.replace(' ', '_')
+            # ✅ Créer le nom unique avec doc_id
+            unique_name = self._make_unique_name(template_name, doc_id)
+            
+            print(f"[STORAGE] Suppression: '{template_name}' → '{unique_name}'")
             
             cur.execute("""
                 DELETE FROM templates 
                 WHERE name = %s
                 RETURNING id
-            """, (safe_name,))
+            """, (unique_name,))
             
             deleted = cur.fetchone()
             
             if not deleted:
-                raise FileNotFoundError(f"Template '{template_name}' introuvable")
+                raise FileNotFoundError(f"Template '{template_name}' introuvable (doc_id: {doc_id})")
             
             conn.commit()
             
-            print(f"🗑️ Template '{safe_name}' supprimé (ID: {deleted[0]})")
+            print(f"🗑️ Template '{template_name}' supprimé (ID: {deleted[0]}, doc_id: {doc_id})")
             
             return f"database://templates/{deleted[0]}"
             

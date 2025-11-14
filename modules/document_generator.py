@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Module de génération de documents pour le publipostage
-Version avec stockage PostgreSQL
+Version avec stockage PostgreSQL isolé par doc_id
 """
 import os
 import re
@@ -13,7 +13,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from datetime import datetime
 from playwright.sync_api import sync_playwright, BrowserContext
 
-# ✅ IMPORTER LE NOUVEAU MODULE
+# ✅ IMPORTER LE STORAGE AVEC ISOLATION
 from modules.template_storage import DatabaseTemplateStorage
 
 
@@ -67,7 +67,7 @@ class DocumentGenerator:
         Args:
             templates_folder: Ignoré, conservé pour compatibilité
         """
-        # ✅ INITIALISER LE STOCKAGE POSTGRESQL
+        # ✅ INITIALISER LE STOCKAGE POSTGRESQL AVEC ISOLATION
         self.template_storage = DatabaseTemplateStorage()
         
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -76,18 +76,14 @@ class DocumentGenerator:
             trim_blocks=True,
             lstrip_blocks=True
         )
-        # Liste blanche des filtres autorisés
         self.jinja_env.filters = {
             'date_fr': self.format_date_fr
         }
         
-        # Charger les fonts en mémoire
         self.fonts_cache = self._load_fonts_to_base64()
-        
-        # Pool de navigateurs par thread
         self._thread_local = threading.local()
         
-        print("✅ Générateur PDF initialisé avec Playwright (thread-safe)")
+        print("✅ Générateur PDF initialisé avec Playwright (thread-safe + isolation)")
     
     def _get_browser_context(self) -> BrowserContext:
         """Récupère ou crée un contexte de navigateur pour le thread actuel"""
@@ -272,40 +268,49 @@ class DocumentGenerator:
         
         return signature
     
-    # ✅ DÉLÉGUER AU STORAGE
+    # ✅ PASSER doc_id AU STORAGE
     def save_template(self, template_name: str, template_content: str, 
                  template_css: str = "", logo: Optional[str] = None,
                  signature: Optional[str] = None,
-                 service_name: Optional[str] = None) -> str:
-        """Sauvegarde un template (délégué à DatabaseTemplateStorage)"""
+                 service_name: Optional[str] = None,
+                 doc_id: Optional[str] = None) -> str:
+        """Sauvegarde un template (avec isolation par doc_id)"""
         return self.template_storage.save_template(
             template_name=template_name,
             template_content=template_content,
             template_css=template_css,
             logo=logo,
             signature=signature,
-            service_name=service_name
+            service_name=service_name,
+            doc_id=doc_id  # ✅ NOUVEAU PARAMÈTRE
         )
     
-    # ✅ DÉLÉGUER AU STORAGE
-    def load_template(self, template_name: str) -> Dict[str, Any]:
-        """Charge un template (délégué à DatabaseTemplateStorage)"""
-        return self.template_storage.load_template(template_name)
+    # ✅ PASSER doc_id AU STORAGE
+    def load_template(self, template_name: str, doc_id: Optional[str] = None) -> Dict[str, Any]:
+        """Charge un template (avec isolation par doc_id)"""
+        return self.template_storage.load_template(
+            template_name=template_name,
+            doc_id=doc_id  # ✅ NOUVEAU PARAMÈTRE
+        )
     
-    # ✅ DÉLÉGUER AU STORAGE
-    def list_templates(self) -> List[str]:
-        """Liste tous les templates (délégué à DatabaseTemplateStorage)"""
-        return self.template_storage.list_templates()
+    # ✅ PASSER doc_id AU STORAGE
+    def list_templates(self, doc_id: Optional[str] = None) -> List[str]:
+        """Liste tous les templates (filtrés par doc_id)"""
+        return self.template_storage.list_templates(
+            doc_id=doc_id  # ✅ NOUVEAU PARAMÈTRE
+        )
     
-    # ✅ DÉLÉGUER AU STORAGE
-    def delete_template(self, template_name: str) -> str:
-        """Supprime un template (délégué à DatabaseTemplateStorage)"""
-        return self.template_storage.delete_template(template_name)
+    # ✅ PASSER doc_id AU STORAGE
+    def delete_template(self, template_name: str, doc_id: Optional[str] = None) -> str:
+        """Supprime un template (avec isolation par doc_id)"""
+        return self.template_storage.delete_template(
+            template_name=template_name,
+            doc_id=doc_id  # ✅ NOUVEAU PARAMÈTRE
+        )
     
     def render_template(self, template_content: str, data: Dict[str, Any]) -> str:
         """Remplace les variables dans le template par les données"""
         try:
-            # Validation: bloquer les tags dangereux
             dangerous_patterns = [
                 r'{%\s*include',
                 r'{%\s*import',
@@ -335,7 +340,6 @@ class DocumentGenerator:
         try:
             rendered_content = self.render_template(template_content, data)
             
-            # Nettoyage du HTML
             rendered_content = re.sub(r'style="color:\s*rgb\([^)]+\);?"', '', rendered_content)
             rendered_content = re.sub(r'\s*style=""\s*', ' ', rendered_content)
             
@@ -368,7 +372,6 @@ class DocumentGenerator:
             margin-bottom: 6pt;
         }}
         
-        /* Formats de taille de Quill */
         .ql-size-8pt {{
             font-size: 8pt !important;
             color: #666666 !important;
@@ -382,7 +385,6 @@ class DocumentGenerator:
             font-size: 24pt;
         }}
         
-        /* Style "pied de page" pour l'éditeur */
         .footer-style {{
             font-family: 'Marianne', sans-serif !important;
             font-size: 8pt !important;
