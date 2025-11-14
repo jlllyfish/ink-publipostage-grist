@@ -870,14 +870,18 @@ async function saveTemplate() {
 }
 
 async function loadTemplatesList() {
+  // ✅ Ne pas charger si doc_id manquant
+  if (!gristDocId || gristDocId.trim() === "") {
+    const container = document.getElementById("templatesList");
+    if (container) {
+      container.innerHTML = '<p class="fr-text--sm">⚠️ Configurez d\'abord le Doc ID Grist</p>';
+    }
+    return;
+  }
+
   try {
-    const response = await fetch("/api/templates", {
-      method: "POST", // ✅ CHANGER GET → POST
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        doc_id: gristDocId, // ✅ AJOUTER doc_id
-      }),
-    });
+    // ✅ Garder GET avec query parameter
+    const response = await fetch(`/api/templates?doc_id=${encodeURIComponent(gristDocId)}`);
     const data = await response.json();
 
     if (data.success) {
@@ -927,13 +931,11 @@ async function loadTemplate(templateName) {
   try {
     showLoadingModal("Chargement du template...");
 
-    const response = await fetch("/api/load-template/" + templateName.replace(/ /g, "_"), {
-      method: "POST", // ✅ CHANGER GET → POST
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        doc_id: gristDocId, // ✅ AJOUTER doc_id
-      }),
-    });
+    const response = await fetch(
+      `/api/load-template/${templateName.replace(/ /g, "_")}?doc_id=${encodeURIComponent(
+        gristDocId
+      )}`
+    );
     const data = await response.json();
 
     if (data.success) {
@@ -997,13 +999,12 @@ async function deleteTemplate(templateName) {
   if (!confirm(`Supprimer le template "${templateName}" ?`)) return;
 
   try {
-    const response = await fetch(`/api/delete-template/${templateName}`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" }, // ✅ AJOUTER
-      body: JSON.stringify({
-        doc_id: gristDocId, // ✅ AJOUTER doc_id
-      }),
-    });
+    const response = await fetch(
+      `/api/delete-template/${templateName}?doc_id=${encodeURIComponent(gristDocId)}`,
+      {
+        method: "DELETE",
+      }
+    );
 
     const data = await response.json();
 
