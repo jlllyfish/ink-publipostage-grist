@@ -357,7 +357,7 @@ def preview_document():
 
 
 @app.route('/api/save-template', methods=['POST'])
-@limiter.limit("10 per minute")  # 🆕 Rate limit
+@limiter.limit("10 per minute")
 def save_template():
     try:
         data = request.get_json(force=True)
@@ -374,6 +374,7 @@ def save_template():
         logo = data.get('logo')
         signature = data.get('signature')
         service_name = data.get('service_name')
+        doc_id = data.get('doc_id')  # ✅ AJOUTER CETTE LIGNE
 
         if not template_name or not template_content:
             return jsonify({
@@ -381,7 +382,6 @@ def save_template():
                 'message': 'Nom et contenu du template requis'
             }), 400
         
-        # 🆕 VALIDER LES IMAGES
         if logo and not validate_image(logo):
             return jsonify({
                 'success': False,
@@ -400,7 +400,8 @@ def save_template():
             template_css=template_css,
             logo=logo,
             signature=signature,
-            service_name=service_name
+            service_name=service_name,
+            doc_id=doc_id  # ✅ AJOUTER CETTE LIGNE
         )
 
         return jsonify({
@@ -419,10 +420,13 @@ def save_template():
 
 
 
-@app.route('/api/templates', methods=['GET'])
+@app.route('/api/templates', methods=['POST'])  # ✅ CHANGER GET en POST
 def list_templates():
     try:
-        templates = doc_gen.list_templates()
+        data = request.get_json()
+        doc_id = data.get('doc_id') if data else None  # ✅ AJOUTER
+        
+        templates = doc_gen.list_templates(doc_id=doc_id)  # ✅ AJOUTER doc_id
         return jsonify({
             'success': True,
             'templates': templates
@@ -438,19 +442,21 @@ def list_templates():
 
 # app.py
 
-@app.route('/api/load-template/<template_name>', methods=['GET'])
+@app.route('/api/load-template/<template_name>', methods=['POST'])  # ✅ CHANGER GET en POST
 def load_template(template_name):
     try:
-        # Décoder l'URL
         from urllib.parse import unquote
         template_name = unquote(template_name)
-        template_data = doc_gen.load_template(template_name)
+        
+        data = request.get_json()  # ✅ AJOUTER
+        doc_id = data.get('doc_id') if data else None  # ✅ AJOUTER
+        
+        template_data = doc_gen.load_template(template_name, doc_id=doc_id)  # ✅ AJOUTER doc_id
         return jsonify({
             'success': True,
             'template': template_data
         })
     except FileNotFoundError:
-        # C'est la bonne façon de gérer un fichier non trouvé
         return jsonify({
             'success': False,
             'message': 'Template introuvable'
@@ -466,7 +472,10 @@ def load_template(template_name):
 @app.route('/api/delete-template/<template_name>', methods=['DELETE'])
 def delete_template(template_name):
     try:
-        filepath = doc_gen.delete_template(template_name)
+        data = request.get_json()  # ✅ AJOUTER
+        doc_id = data.get('doc_id') if data else None  # ✅ AJOUTER
+        
+        filepath = doc_gen.delete_template(template_name, doc_id=doc_id)  # ✅ AJOUTER doc_id
         return jsonify({
             'success': True,
             'message': f'Template "{template_name}" supprimé avec succès'
@@ -483,6 +492,7 @@ def delete_template(template_name):
             'success': False,
             'message': f'Erreur: {str(e)}'
         }), 500
+
 
 @app.route('/api/generate-pdf', methods=['POST'])
 @limiter.limit("30 per hour")
